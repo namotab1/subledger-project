@@ -1,0 +1,1573 @@
+{
+  "info": {
+    "_postman_id": "5d1f3c0e-7a52-4c1e-9d3b-6b0f4a2c9e11",
+    "name": "SubLedger",
+    "description": "Walks through the whole SubLedger workflow and checks every business rule. Run the folders in order (or use the Collection Runner). Ids are passed between requests through collection variables, and a fresh customer email is generated on every run, so the collection can be re-run against the same database.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "0. Health",
+      "item": [
+        {
+          "name": "Health check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Service reports ok\", function () { pm.expect(pm.response.json().status).to.eql(\"ok\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "1. Plans",
+      "item": [
+        {
+          "name": "Create plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Plan is active and priced 49.99\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql(\"active\");",
+                  "    pm.expect(body.price).to.eql(\"49.99\");",
+                  "});",
+                  "pm.collectionVariables.set(\"plan_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Pro\",\n  \"description\": \"Pro plan\",\n  \"price\": \"49.99\",\n  \"billing_cycle\": \"monthly\",\n  \"currency\": \"USD\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create plan - price must be greater than 0 (rule 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Free\",\n  \"price\": \"0\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create inactive plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.collectionVariables.set(\"inactive_plan_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Legacy\",\n  \"price\": \"10.00\",\n  \"status\": \"inactive\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List plans",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a list containing the new plan\", function () {",
+                  "    const ids = pm.response.json().map(function (p) { return p.id; });",
+                  "    pm.expect(ids).to.include(Number(pm.collectionVariables.get(\"plan_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/plans",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "plans"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List active plans only",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Every plan is active\", function () {",
+                  "    pm.response.json().forEach(function (p) { pm.expect(p.status).to.eql(\"active\"); });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/plans?status=active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "plans"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Customers",
+      "item": [
+        {
+          "name": "Create customer",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// A fresh email on every run, so the collection can be re-run against the same database.",
+                  "const email = \"asha.\" + Date.now() + \"@example.com\";",
+                  "pm.collectionVariables.set(\"customer_email\", email);",
+                  "pm.collectionVariables.set(\"customer_email_upper\", email.toUpperCase());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Email is stored lower-case\", function () {",
+                  "    pm.expect(pm.response.json().email).to.eql(pm.collectionVariables.get(\"customer_email\"));",
+                  "});",
+                  "pm.collectionVariables.set(\"customer_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Asha Verma\",\n  \"email\": \"{{customer_email}}\",\n  \"company_name\": \"Acme\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create customer - duplicate email rejected (rule 2)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Error code is conflict\", function () { pm.expect(pm.response.json().error).to.eql(\"conflict\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Someone Else\",\n  \"email\": \"{{customer_email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create customer - duplicate email ignores letter case",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Someone Else\",\n  \"email\": \"{{customer_email_upper}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create customer - invalid email",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad\",\n  \"email\": \"not-an-email\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Returns the right customer\", function () {",
+                  "    pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get(\"customer_id\")));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{customer_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List customers",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is a list\", function () { pm.expect(pm.response.json()).to.be.an(\"array\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get customer - not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });",
+                  "pm.test(\"Error code is not_found\", function () { pm.expect(pm.response.json().error).to.eql(\"not_found\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/999999",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "999999"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Subscriptions",
+      "item": [
+        {
+          "name": "Create subscription - inactive plan rejected (rule 3)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Message mentions the plan is inactive\", function () {",
+                  "    pm.expect(pm.response.json().detail).to.include(\"inactive\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"plan_id\": {{inactive_plan_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Subscription is active and the period is one month (month-end clamped)\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql(\"active\");",
+                  "    pm.expect(body.current_period_start).to.eql(\"2026-01-31\");",
+                  "    pm.expect(body.current_period_end).to.eql(\"2026-02-28\");",
+                  "});",
+                  "pm.collectionVariables.set(\"subscription_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"plan_id\": {{plan_id}},\n  \"start_date\": \"2026-01-31\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions"
+              ]
+            },
+            "description": "Starts on 31 Jan so the monthly period shows the month-end clamp: it ends on 28 Feb, not 3 Mar."
+          },
+          "response": []
+        },
+        {
+          "name": "Create subscription - duplicate active subscription rejected (rule 4)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"plan_id\": {{plan_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create subscription - unknown plan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"plan_id\": 999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List subscriptions for the customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Exactly one active subscription\", function () {",
+                  "    const list = pm.response.json();",
+                  "    pm.expect(list).to.have.lengthOf(1);",
+                  "    pm.expect(list[0].status).to.eql(\"active\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/subscriptions?customer_id={{customer_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions"
+              ],
+              "query": [
+                {
+                  "key": "customer_id",
+                  "value": "{{customer_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Invoices",
+      "item": [
+        {
+          "name": "Generate invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Issued, unpaid, priced from the plan\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql(\"issued\");",
+                  "    pm.expect(body.amount_due).to.eql(\"49.99\");",
+                  "    pm.expect(body.amount_paid).to.eql(\"0.00\");",
+                  "    pm.expect(body.amount_remaining).to.eql(\"49.99\");",
+                  "    pm.expect(body.due_date).to.eql(\"2026-02-14\");  // period start + 14 days",
+                  "});",
+                  "pm.collectionVariables.set(\"invoice_id\", pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": {{subscription_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "generate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Change the plan price",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Plan price is now 59.99\", function () { pm.expect(pm.response.json().price).to.eql(\"59.99\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": \"59.99\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/plans/{{plan_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "plans",
+                "{{plan_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate invoice at the new price (rule 5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"New invoice uses the price at generation time\", function () {",
+                  "    pm.expect(pm.response.json().amount_due).to.eql(\"59.99\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": {{subscription_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "generate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get first invoice - keeps its original price (rule 5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"amount_due is still 49.99\", function () { pm.expect(pm.response.json().amount_due).to.eql(\"49.99\"); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/invoices/{{invoice_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoice_id}}"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate invoice - invalid billing period",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": {{subscription_id}},\n  \"period_start\": \"2026-03-31\",\n  \"period_end\": \"2026-03-01\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "generate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate invoice - unknown subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": 999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "generate"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Payments",
+      "item": [
+        {
+          "name": "Record partial payment (rule 7)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Invoice becomes partially_paid with 29.99 remaining\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.payment_attempt.status).to.eql(\"success\");",
+                  "    pm.expect(body.invoice_status).to.eql(\"partially_paid\");",
+                  "    pm.expect(body.invoice.amount_paid).to.eql(\"20.00\");",
+                  "    pm.expect(body.invoice.amount_remaining).to.eql(\"29.99\");",
+                  "});",
+                  "pm.collectionVariables.set(\"partial_attempt_id\", pm.response.json().payment_attempt.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"20.00\",\n  \"currency\": \"USD\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_partial_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record failed payment - amount_paid does not change (rule 8)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Failure is stored and the invoice is untouched\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.payment_attempt.status).to.eql(\"failed\");",
+                  "    pm.expect(body.payment_attempt.failure_reason).to.eql(\"Card declined\");",
+                  "    pm.expect(body.invoice.amount_paid).to.eql(\"20.00\");",
+                  "    pm.expect(body.invoice_status).to.eql(\"partially_paid\");",
+                  "});",
+                  "pm.collectionVariables.set(\"failed_attempt_id\", pm.response.json().payment_attempt.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"49.99\",\n  \"currency\": \"USD\",\n  \"status\": \"failed\",\n  \"provider_reference\": \"pay_failed_001\",\n  \"failure_reason\": \"Card declined\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record payment - exceeds remaining amount rejected (rule 6)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });",
+                  "pm.test(\"Error code is business_rule_violation\", function () {",
+                  "    pm.expect(pm.response.json().error).to.eql(\"business_rule_violation\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"30.00\",\n  \"currency\": \"USD\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_over_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            },
+            "description": "Only 29.99 remains, so 30.00 must be rejected."
+          },
+          "response": []
+        },
+        {
+          "name": "Record payment - currency mismatch rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"5.00\",\n  \"currency\": \"EUR\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_eur_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record payment - amount must be greater than 0",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"0\",\n  \"currency\": \"USD\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_zero_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record payment - unknown invoice",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": 999999,\n  \"amount\": \"5.00\",\n  \"currency\": \"USD\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_404_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record final payment - invoice becomes paid (rule 7)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });",
+                  "pm.test(\"Invoice is paid with nothing remaining\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.invoice_status).to.eql(\"paid\");",
+                  "    pm.expect(body.invoice.amount_paid).to.eql(\"49.99\");",
+                  "    pm.expect(body.invoice.amount_remaining).to.eql(\"0.00\");",
+                  "});",
+                  "pm.collectionVariables.set(\"final_attempt_id\", pm.response.json().payment_attempt.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"29.99\",\n  \"currency\": \"USD\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_final_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Record payment - paid invoice rejects further payments",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoice_id\": {{invoice_id}},\n  \"amount\": \"1.00\",\n  \"currency\": \"USD\",\n  \"status\": \"success\",\n  \"provider_reference\": \"pay_late_001\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/payments/record",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get invoice with its payment attempts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Paid, with three attempts in order: success, failed, success\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql(\"paid\");",
+                  "    pm.expect(body.payment_attempts.map(function (a) { return a.status; }))",
+                  "        .to.eql([\"success\", \"failed\", \"success\"]);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/invoices/{{invoice_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "{{invoice_id}}"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. Ledger",
+      "item": [
+        {
+          "name": "Get customer ledger (rule 9)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Five entries, in the order things happened\", function () {",
+                  "    const entries = pm.response.json();",
+                  "    pm.expect(entries.map(function (e) { return e.entry_type; })).to.eql([",
+                  "        \"invoice_created\", \"invoice_created\", \"payment_success\", \"payment_failure\", \"payment_success\"",
+                  "    ]);",
+                  "});",
+                  "pm.test(\"Payment entries are traceable to their payment attempt through reference_id\", function () {",
+                  "    const entries = pm.response.json();",
+                  "    pm.expect(entries[2].reference_id).to.eql(\"payment_attempt:\" + pm.collectionVariables.get(\"partial_attempt_id\"));",
+                  "    pm.expect(entries[3].reference_id).to.eql(\"payment_attempt:\" + pm.collectionVariables.get(\"failed_attempt_id\"));",
+                  "    pm.expect(entries[4].reference_id).to.eql(\"payment_attempt:\" + pm.collectionVariables.get(\"final_attempt_id\"));",
+                  "});",
+                  "pm.test(\"The invoice_created entry points at the first invoice\", function () {",
+                  "    pm.expect(pm.response.json()[0].reference_id).to.eql(\"invoice:\" + pm.collectionVariables.get(\"invoice_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}/ledger",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "{{customer_id}}",
+                "ledger"
+              ]
+            },
+            "description": "Two invoices were generated, then three payment attempts were recorded. Rejected requests (overpayment, wrong currency, paid invoice) must have written nothing."
+          },
+          "response": []
+        },
+        {
+          "name": "Get customer ledger - customer not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/customers/999999/ledger",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "customers",
+                "999999",
+                "ledger"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "7. Cancel subscription",
+      "item": [
+        {
+          "name": "Cancel subscription",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Cancelled with a timestamp\", function () {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.status).to.eql(\"cancelled\");",
+                  "    pm.expect(body.cancelled_at).to.not.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/subscriptions/{{subscription_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions",
+                "{{subscription_id}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel subscription - already cancelled",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/subscriptions/{{subscription_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions",
+                "{{subscription_id}}",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generate invoice - cancelled subscription rejected",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () { pm.response.to.have.status(409); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subscription_id\": {{subscription_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/invoices/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "invoices",
+                "generate"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create subscription - allowed again after cancelling",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () { pm.response.to.have.status(201); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"plan_id\": {{plan_id}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/subscriptions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions"
+              ]
+            },
+            "description": "The partial unique index only covers active rows, so a cancelled subscription does not block this."
+          },
+          "response": []
+        },
+        {
+          "name": "Cancel subscription - not found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 404\", function () { pm.response.to.have.status(404); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/subscriptions/999999/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "subscriptions",
+                "999999",
+                "cancel"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    }
+  ]
+}
